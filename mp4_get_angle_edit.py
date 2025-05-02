@@ -7,15 +7,12 @@ Created on Sat May  3 01:02:09 2025
 import streamlit as st
 import cv2
 import numpy as np
-import json
 import tempfile
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# ページ設定を最初に呼ぶ
 st.set_page_config(page_title="Angle Inspector", layout="wide")
 
-# ユーティリティ関数
 def load_video_to_tempfile(uploaded_file):
     tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     tfile.write(uploaded_file.getbuffer())
@@ -36,7 +33,6 @@ def angle_between_lines(p1, p2, p3, p4):
     cosang = np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)
     return np.degrees(np.arccos(cosang))
 
-# サイドバー：動画アップロード
 uploaded = st.sidebar.file_uploader("Upload an MP4", type=["mp4"])
 if uploaded is None:
     st.sidebar.info("👈 Upload a video to begin")
@@ -51,11 +47,9 @@ if not cap.isOpened():
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps = cap.get(cv2.CAP_PROP_FPS) or 30
 
-# 初期4点（正規化座標）
-if "points" not in st.session_state:
+if "points" not in st.session_state or len(st.session_state.points) != 4:
     st.session_state.points = [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]]
 
-# スライダーでフレーム選択
 frame_idx = st.slider(
     f"Frame position ({frame_count} frames, {fps:.1f} fps)",
     min_value=0,
@@ -63,26 +57,43 @@ frame_idx = st.slider(
     value=0,
 )
 
-# フレーム読み込みとPIL変換
 bgr = get_frame(cap, frame_idx)
 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 image_pil = Image.fromarray(rgb)
+
+max_width = 800
+scale = min(1.0, max_width / image_pil.width)
+new_w, new_h = int(image_pil.width * scale), int(image_pil.height * scale)
+image_pil = image_pil.resize((new_w, new_h))
 w, h = image_pil.size
 
-# キャンバス初期オブジェクト（円4つ）
-initial_objects = [
-    {
+# 点オブジェクト作成
+initial_objects = []
+for i, (x, y) in enumerate(st.session_state.points):
+    initial_objects.append({
         "type": "circle",
         "radius": 6,
         "fill": "rgba(255,255,255,0.8)",
         "stroke": "#ffffff",
         "left": x * w - 6,
         "top": y * h - 6,
-    }
-    for x, y in st.session_state.points
-]
+        "name": f"pt{i+1}",
+    })
 
-# キャンバス表示
+# 線オブジェクト作成（点1-2, 点3-4）
+px = [x * w for x, y in st.session_state.points]
+py = [y * h for x, y in st.session_state.points]
+initial_objects.append({
+    "type": "line",
+    "x1": px[0], "y1": py[0], "x2": px[1], "y2": py[1],
+    "stroke": "#ffffff", "strokeWidth": 2,
+})
+initial_objects.append({
+    "type": "line",
+    "x1": px[2], "y1": py[2], "x2": px[3], "y2": py[3],
+    "stroke": "#ffffff", "strokeWidth": 2,
+})
+
 canvas = st_canvas(
     fill_color="rgba(255, 165, 0, 0.0)",
     stroke_width=2,
@@ -90,16 +101,18 @@ canvas = st_canvas(
     height=h,
     width=w,
     drawing_mode="transform",
-    initial_drawing={"version": "4.6.0", "objects": initial_objects},  # ← ここ修正
-    key="canvas",
+    initial_drawing={"version": "4.6.0", "objects": initial_objects},
+    key=f"canvas_{frame_idx}",
 )
-# ユーザー操作後の座標更新
-if canvas.json_data and len(canvas.json_data.get("objects", [])) == 4:
-    objs = canvas.json_data["objects"]
-    st.session_state.points = [
-        [(obj["left"] + obj.get("radius", 0)) / w, (obj["top"] + obj.get("radius", 0)) / h]
-        for obj in objs
-    ]
+
+# 座標更新（円のみ）
+if canvas.json_data:
+    objs = [obj for obj in canvas.json_data.get("objects", []) if obj["type"] == "circle"]
+    if len(objs) == 4:
+        st.session_state.points = [
+            [(obj["left"] + obj.get("radius", 0)) / w, (obj["top"] + obj.get("radius", 0)) / h]
+            for obj in objs
+        ]
 
 # 角度計算
 p = st.session_state.points
@@ -108,7 +121,6 @@ angle = angle_between_lines(pix_pts[0], pix_pts[1], pix_pts[2], pix_pts[3])
 
 st.markdown(f"### Angle: **{angle:.2f}°**  (Line 1: p1-p2, Line 2: p3-p4)")
 
-# スナップショット保存関数
 def snapshot():
     out = np.array(image_pil).copy()
     for (x, y) in pix_pts:
@@ -119,7 +131,6 @@ def snapshot():
     cv2.imwrite(fn, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
     return fn
 
-# スナップショットボタン
 if st.button("📸 Save snapshot"):
     filename = snapshot()
     with open(filename, "rb") as f:

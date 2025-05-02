@@ -9,9 +9,10 @@ import cv2
 import numpy as np
 import json
 import tempfile
+from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# ページ設定（最初に呼ぶ）
+# ページ設定は最初に呼ぶ！
 st.set_page_config(page_title="Angle Inspector", layout="wide")
 
 # ユーティリティ関数
@@ -35,7 +36,7 @@ def angle_between_lines(p1, p2, p3, p4):
     cosang = np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)
     return np.degrees(np.arccos(cosang))
 
-# サイドバー：動画アップロード
+# サイドバー: 動画アップロード
 uploaded = st.sidebar.file_uploader("Upload an MP4", type=["mp4"])
 if uploaded is None:
     st.sidebar.info("👈 Upload a video to begin")
@@ -50,7 +51,7 @@ if not cap.isOpened():
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps = cap.get(cv2.CAP_PROP_FPS) or 30
 
-# 初期4点（正規化座標）
+# 初期点 (正規化座標)
 if "points" not in st.session_state:
     st.session_state.points = [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]]
 
@@ -62,12 +63,13 @@ frame_idx = st.slider(
     value=0,
 )
 
-# フレーム読み込みとRGB変換
+# フレーム読み込みとPIL変換
 bgr = get_frame(cap, frame_idx)
 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-h, w, _ = rgb.shape
+image_pil = Image.fromarray(rgb)
+h, w = image_pil.height, image_pil.width
 
-# キャンバス初期オブジェクト（円4つ）
+# キャンバス初期オブジェクト (円4つ)
 initial_objects = [
     {
         "type": "circle",
@@ -84,7 +86,7 @@ initial_objects = [
 canvas = st_canvas(
     fill_color="rgba(255, 165, 0, 0.0)",
     stroke_width=2,
-    background_image=rgb,
+    background_image=image_pil,
     height=h,
     width=w,
     drawing_mode="transform",
@@ -109,7 +111,7 @@ st.markdown(f"### Angle: **{angle:.2f}°**  (Line 1: p1-p2, Line 2: p3-p4)")
 
 # スナップショット保存関数
 def snapshot():
-    out = rgb.copy()
+    out = np.array(image_pil).copy()
     for (x, y) in pix_pts:
         cv2.circle(out, (int(x), int(y)), 6, (255, 255, 255), -1)
     cv2.line(out, tuple(map(int, pix_pts[0])), tuple(map(int, pix_pts[1])), (255, 255, 255), 2)
@@ -118,7 +120,7 @@ def snapshot():
     cv2.imwrite(fn, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
     return fn
 
-# スナップショット保存ボタン
+# スナップショットボタン
 if st.button("📸 Save snapshot"):
     filename = snapshot()
     with open(filename, "rb") as f:

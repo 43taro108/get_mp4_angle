@@ -4,7 +4,6 @@ Created on Sat May  3 01:02:09 2025
 
 @author: ktrpt
 """
-
 import streamlit as st
 import cv2
 import numpy as np
@@ -12,23 +11,7 @@ import json
 import tempfile
 from streamlit_drawable_canvas import st_canvas
 
-"""
-Streamlit app: load an MP4, seek with a slider, drag 4 points to form two
-lines, and display the angle between those lines in real‑time.
-Save this file as `app.py`, add the listed requirements to `requirements.txt`,
-and deploy to Streamlit Community Cloud.
-
-requirements.txt:
----------------
-streamlit==1.34.0
-streamlit-drawable-canvas==0.10.0
-opencv-python-headless
-numpy
----------------
-"""
-
-st.set_page_config(page_title="Angle Inspector", layout="wide")
-
+st.set_page_config(page_title=\"Angle Inspector\", layout=\"wide\")
 # ---------------- Utility functions ---------------- #
 
 def load_video_to_tempfile(uploaded_file):

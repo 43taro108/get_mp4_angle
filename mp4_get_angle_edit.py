@@ -11,7 +11,7 @@ import json
 import tempfile
 from streamlit_drawable_canvas import st_canvas
 
-st.set_page_config(page_title=\"Angle Inspector\", layout=\"wide\")
+st.set_page_config(page_title="Angle Inspector", layout="wide")
 # ---------------- Utility functions ---------------- #
 
 def load_video_to_tempfile(uploaded_file):

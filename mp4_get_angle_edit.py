@@ -11,18 +11,16 @@ import json
 import tempfile
 from streamlit_drawable_canvas import st_canvas
 
+# ページ設定（最初に呼ぶ）
 st.set_page_config(page_title="Angle Inspector", layout="wide")
-# ---------------- Utility functions ---------------- #
 
+# ユーティリティ関数
 def load_video_to_tempfile(uploaded_file):
-    """Write the uploaded file to a NamedTemporaryFile so OpenCV can read it"""
     tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     tfile.write(uploaded_file.getbuffer())
     return tfile.name
 
-
 def get_frame(cap, frame_idx):
-    """Return BGR frame at position 'frame_idx' (0‑based)"""
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
     ret, frame = cap.read()
     if not ret:
@@ -30,21 +28,17 @@ def get_frame(cap, frame_idx):
         st.stop()
     return frame
 
-
 def angle_between_lines(p1, p2, p3, p4):
-    """Compute angle between line p1‑p2 and line p3‑p4 in degrees."""
     v1 = np.array(p2) - np.array(p1)
     v2 = np.array(p4) - np.array(p3)
     v1_u, v2_u = v1 / np.linalg.norm(v1), v2 / np.linalg.norm(v2)
     cosang = np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)
     return np.degrees(np.arccos(cosang))
 
-
-# ---------------- Sidebar: video load ---------------- #
-
+# サイドバー：動画アップロード
 uploaded = st.sidebar.file_uploader("Upload an MP4", type=["mp4"])
 if uploaded is None:
-    st.sidebar.info("👈 Upload a video to begin")
+    st.sidebar.info("👈 Upload a video to begin")
     st.stop()
 
 video_path = load_video_to_tempfile(uploaded)
@@ -56,29 +50,24 @@ if not cap.isOpened():
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps = cap.get(cv2.CAP_PROP_FPS) or 30
 
-default_points = [
-    [0.3, 0.3],  # (x, y) normalized 0‑1
-    [0.7, 0.3],
-    [0.3, 0.7],
-    [0.7, 0.7],
-]
+# 初期4点（正規化座標）
 if "points" not in st.session_state:
-    st.session_state.points = default_points
+    st.session_state.points = [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]]
 
-# ---------------- Main UI ---------------- #
-
+# スライダーでフレーム選択
 frame_idx = st.slider(
-    "Frame position ({} frames, {:.1f} fps)".format(frame_count, fps),
+    f"Frame position ({frame_count} frames, {fps:.1f} fps)",
     min_value=0,
     max_value=frame_count - 1,
     value=0,
 )
 
+# フレーム読み込みとRGB変換
 bgr = get_frame(cap, frame_idx)
 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 h, w, _ = rgb.shape
 
-# Convert current points to Fabric.js circles for the canvas
+# キャンバス初期オブジェクト（円4つ）
 initial_objects = [
     {
         "type": "circle",
@@ -91,8 +80,9 @@ initial_objects = [
     for x, y in st.session_state.points
 ]
 
+# キャンバス表示
 canvas = st_canvas(
-    fill_color="rgba(255, 165, 0, 0.0)",  # transparent fill
+    fill_color="rgba(255, 165, 0, 0.0)",
     stroke_width=2,
     background_image=rgb,
     height=h,
@@ -102,36 +92,34 @@ canvas = st_canvas(
     key="canvas",
 )
 
-# If the user moved the points, update state
+# ユーザー操作後の座標更新
 if canvas.json_data and len(canvas.json_data.get("objects", [])) == 4:
     objs = canvas.json_data["objects"]
     st.session_state.points = [
-        [ (obj["left"] + obj.get("radius", 0)) / w, (obj["top"] + obj.get("radius", 0)) / h ]
+        [(obj["left"] + obj.get("radius", 0)) / w, (obj["top"] + obj.get("radius", 0)) / h]
         for obj in objs
     ]
 
-# Calculate angle using updated points
+# 角度計算
 p = st.session_state.points
-pix_pts = [ (x * w, y * h) for x, y in p ]
+pix_pts = [(x * w, y * h) for x, y in p]
 angle = angle_between_lines(pix_pts[0], pix_pts[1], pix_pts[2], pix_pts[3])
 
-st.markdown(
-    f"### Angle: **{angle:.2f}°**  (Line 1: p1‑p2, Line 2: p3‑p4)"
-)
+st.markdown(f"### Angle: **{angle:.2f}°**  (Line 1: p1-p2, Line 2: p3-p4)")
 
-# Allow snapshot of current annotation
+# スナップショット保存関数
 def snapshot():
     out = rgb.copy()
-    # draw circles & lines on snapshot
     for (x, y) in pix_pts:
         cv2.circle(out, (int(x), int(y)), 6, (255, 255, 255), -1)
-    cv2.line(out, pix_pts[0], pix_pts[1], (255, 255, 255), 2)
-    cv2.line(out, pix_pts[2], pix_pts[3], (255, 255, 255), 2)
+    cv2.line(out, tuple(map(int, pix_pts[0])), tuple(map(int, pix_pts[1])), (255, 255, 255), 2)
+    cv2.line(out, tuple(map(int, pix_pts[2])), tuple(map(int, pix_pts[3])), (255, 255, 255), 2)
     fn = f"snapshot_{frame_idx}.png"
     cv2.imwrite(fn, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
     return fn
 
-if st.button("📸 Save snapshot"):
+# スナップショット保存ボタン
+if st.button("📸 Save snapshot"):
     filename = snapshot()
     with open(filename, "rb") as f:
-        btn = st.download_button("Download image", f, file_name=filename, mime="image/png")
+        st.download_button("Download image", f, file_name=filename, mime="image/png")

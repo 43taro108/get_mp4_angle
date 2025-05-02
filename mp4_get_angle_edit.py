@@ -90,10 +90,9 @@ canvas = st_canvas(
     height=h,
     width=w,
     drawing_mode="transform",
-    initial_drawing=json.dumps({"version": "4.6.0", "objects": initial_objects}),
+    initial_drawing={"version": "4.6.0", "objects": initial_objects},  # ← ここ修正
     key="canvas",
 )
-
 # ユーザー操作後の座標更新
 if canvas.json_data and len(canvas.json_data.get("objects", [])) == 4:
     objs = canvas.json_data["objects"]
